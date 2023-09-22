@@ -1,0 +1,704 @@
+<?php
+
+
+include 'config.php';
+
+//print_r($_SESSION);
+if (!isset($_SESSION['admin_user_id'])) {
+    header("Location: login.php");
+}else{
+    $admin_username = $_SESSION['admin_username'];
+    $admin_user_id = $_SESSION['admin_user_id'];
+    $sql = "SELECT * FROM user WHERE user_id='$admin_user_id'";
+    $result = mysqli_query($conn, $sql);
+    if ($result->num_rows > 0) {
+        $row = mysqli_fetch_assoc($result);
+        $_SESSION['user_id'] = $row['user_id'];
+        $_SESSION['first_name'] = $row['first_name'];
+        $_SESSION['last_name'] = $row['last_name'];
+        $_SESSION['user_image'] = $row['user_image'];
+        $_POST['contact_number'] = $row['contact_number'];
+        $_POST['billing_address'] = $row['billing_address'];
+        $_POST['zipcode'] = $row['zipcode'];
+        $_POST['email'] = $row['email'];
+        $first_name = $_SESSION['first_name'];
+        $last_name = $_SESSION['last_name'];
+        $user_image = $_SESSION['user_image'];
+        if($row['user_type'] == 1){
+            $_POST['user_type'] = 'User';
+        }elseif($row['user_type'] == 32){
+            $_POST['user_type'] = 'Admin';
+        }
+        //echo $_SESSION['user_id'];
+    } else {
+        echo "<script>alert('Woops! Email or Password is Wrong.')</script>";
+    }
+}
+
+if(isset($_SESSION['user_id'])){
+    $user_id = $_SESSION['user_id'];
+
+    //Count Order Number
+    $count_query = mysqli_query($conn, "SELECT DISTINCT order_number FROM `checkout` ORDER BY order_number");
+
+    $row_count = mysqli_fetch_assoc($count_query);
+    $check_row = mysqli_num_rows($count_query);
+    $count = $check_row;
+
+    //Count Reserve Number
+    $count_reserve_query = mysqli_query($conn, "SELECT DISTINCT reserve_number FROM `reserve_orders` ORDER BY reserve_number");
+
+    $row_count_reserve = mysqli_fetch_assoc($count_reserve_query);
+    $check_row_reserve = mysqli_num_rows($count_reserve_query);
+    $count_reserve = $check_row_reserve;
+
+    //Count Delivery
+    $count_processing_query = mysqli_query($conn, "SELECT DISTINCT order_number FROM `checkout` WHERE item_status ='Processing' ORDER BY order_number");
+
+    $row_processing_count = mysqli_fetch_assoc($count_processing_query);
+    $check_processing_row = mysqli_num_rows($count_processing_query);
+    $count_processing = $check_processing_row;
+
+    //Count Products
+    $count_product_query = mysqli_query($conn, "SELECT item_id FROM `product` ORDER BY item_id");
+
+    $row_product_count = mysqli_fetch_assoc($count_product_query);
+    $check_product_row = mysqli_num_rows($count_product_query);
+    $count_product = $check_product_row;
+
+    //Count Delivery
+    $count_delivery_query = mysqli_query($conn, "SELECT DISTINCT order_number FROM `checkout` WHERE item_status ='Delivering' ORDER BY order_number");
+
+    $row_delivery_count = mysqli_fetch_assoc($count_delivery_query);
+    $check_delivery_row = mysqli_num_rows($count_delivery_query);
+    $count_delivery = $check_delivery_row;
+
+    //Count Transaction Completed
+    $count_transaction_query = mysqli_query($conn, "SELECT DISTINCT order_number FROM `transaction` WHERE (item_status = 'Completed' or item_status = 'Cancelled') ORDER BY order_number");
+
+    $row_transaction_count = mysqli_fetch_assoc($count_transaction_query);
+    $check_transaction_row = mysqli_num_rows($count_transaction_query);
+    $count_transaction = $check_transaction_row;
+
+    //Count Transaction Cancelled
+    $count_transaction_query_cancelled = mysqli_query($conn, "SELECT DISTINCT order_number FROM `transaction` WHERE item_status = 'Cancelled' ORDER BY order_number");
+
+    $row_transaction_count_cancelled = mysqli_fetch_assoc($count_transaction_query_cancelled);
+    $check_transaction_row_cancelled = mysqli_num_rows($count_transaction_query_cancelled);
+    $count_transaction_cancelled = $check_transaction_row_cancelled;
+
+    //Count Total Product Sold
+    $total_products = 0;
+    $total_query = mysqli_query($conn, "SELECT * FROM `transaction`") or die("query failed");
+    while($row = mysqli_fetch_assoc($total_query)){
+        $count_products = $row['item_quantity'];
+        $total_products += $count_products;
+
+    }
+
+    //Count Total Sales Revenue
+    $total_sales = 0;
+    $total_query = mysqli_query($conn, "SELECT * FROM `transaction` ") or die("query failed");
+    $total_cancel_query = mysqli_query($conn, "SELECT DISTINCT order_number, item_status, date FROM `transaction` WHERE item_status = 'Cancelled' ORDER BY date");
+    function weekOfMonth($strDate) {
+        $dateArray = explode("/", $strDate);
+        $date = new DateTime();
+        $date->setDate($dateArray[0], $dateArray[1], $dateArray[2]);
+        return floor((date_format($date, 'j') - 1) / 7) + 1;
+    }
+    $product_sold = 0;
+    $count_sales = 0;
+    $product_sold_week_2 = 0;
+    $count_sales_week_2 = 0;
+    $product_sold_week_3 = 0;
+    $count_sales_week_3 = 0;
+    $product_sold_week_4 = 0;
+    $count_sales_week_4 = 0;
+    $product_sold_week_5 = 0;
+    $count_sales_week_5 = 0;
+
+    $product_sold_new_month = 0;
+    $count_sales_new_month = 0;
+
+    $cancelled = 0;
+    $cancelled_2 = 0;
+    $cancelled_3 = 0;
+    $cancelled_4 = 0;
+    $cancelled_5 = 0;
+
+        while($row = mysqli_fetch_assoc($total_query)){
+
+            $date = $row['date'];
+            //echo $count_sales . " " . $date . "<br>";
+            $total_sales += $count_sales;
+            $timestamp = $row['date'];
+            $timestamp= date("Y/m/d", strtotime($timestamp));
+            $timestamp_month = date("M", strtotime($timestamp));
+            $week = "Week " . weekOfMonth($timestamp);
+
+
+            if($row['item_status'] == "Completed"){
+
+                if($week == "Week 1"){
+                    $week_1 = $timestamp_month . " Week " . weekOfMonth($timestamp);
+                    $timestamp = $row['date'];
+                    $sum_item_query = mysqli_query($conn, "SELECT SUM(item_quantity) as total  FROM `transaction` WHERE item_status = 'Completed' AND date = '$timestamp'");
+                    $sum_sales_query = mysqli_query($conn, "SELECT SUM(item_quantity * item_price) as total_sales  FROM `transaction` WHERE item_status = 'Completed' AND date = '$timestamp'") or die("query failed");
+                    $row = mysqli_fetch_assoc($sum_item_query);
+                    $row_sales = mysqli_fetch_assoc($sum_sales_query);
+                    $product_sold = $row['total'];
+                    $count_sales = $row_sales['total_sales'];
+
+                }elseif($week == "Week 2"){
+                    $week_2 = $timestamp_month . " Week " . weekOfMonth($timestamp);
+                    $timestamp = $row['date'];
+                    $sum_item_query = mysqli_query($conn, "SELECT SUM(item_quantity) as total  FROM `transaction` WHERE item_status = 'Completed' AND date = '$timestamp'");
+                    $sum_sales_query = mysqli_query($conn, "SELECT SUM(item_quantity * item_price) as total_sales  FROM `transaction` WHERE item_status = 'Completed' AND date = '$timestamp'") or die("query failed");
+                    $row = mysqli_fetch_assoc($sum_item_query);
+                    $row_sales = mysqli_fetch_assoc($sum_sales_query);
+                    $product_sold_week_2 = $row['total'];
+                    $count_sales_week_2 = $row_sales['total_sales'];
+
+                }elseif($week == "Week 3"){
+                    $week_3 = $timestamp_month . " Week " . weekOfMonth($timestamp);
+                    $timestamp = $row['date'];
+                    $sum_item_query = mysqli_query($conn, "SELECT SUM(item_quantity) as total  FROM `transaction` WHERE item_status = 'Completed' AND date = '$timestamp'");
+                    $sum_sales_query = mysqli_query($conn, "SELECT SUM(item_quantity * item_price) as total_sales  FROM `transaction` WHERE item_status = 'Completed' AND date = '$timestamp'") or die("query failed");
+                    $row = mysqli_fetch_assoc($sum_item_query);
+                    $row_sales = mysqli_fetch_assoc($sum_sales_query);
+                    $product_sold_week_3 = $row['total'];
+                    $count_sales_week_3 = $row_sales['total_sales'];
+
+                }elseif($week == "Week 4"){
+                    $week_4 = $timestamp_month . " Week " . weekOfMonth($timestamp);
+                    $timestamp = $row['date'];
+                    $sum_item_query = mysqli_query($conn, "SELECT SUM(item_quantity) as total  FROM `transaction` WHERE item_status = 'Completed' AND date = '$timestamp'");
+                    $sum_sales_query = mysqli_query($conn, "SELECT SUM(item_quantity * item_price) as total_sales  FROM `transaction` WHERE item_status = 'Completed' AND date = '$timestamp'") or die("query failed");
+                    $row = mysqli_fetch_assoc($sum_item_query);
+                    $row_sales = mysqli_fetch_assoc($sum_sales_query);
+                    $product_sold_week_4 = $row['total'];
+                    $count_sales_week_4 = $row_sales['total_sales'];
+
+                }elseif($week == "Week 5"){
+                    $week_5 = $timestamp_month . " Week " . weekOfMonth($timestamp);
+                    $timestamp = $row['date'];
+                    $sum_item_query = mysqli_query($conn, "SELECT SUM(item_quantity) as total  FROM `transaction` WHERE item_status = 'Completed' AND date = '$timestamp'");
+                    $sum_sales_query = mysqli_query($conn, "SELECT SUM(item_quantity * item_price) as total_sales  FROM `transaction` WHERE item_status = 'Completed' AND date = '$timestamp'") or die("query failed");
+                    $row = mysqli_fetch_assoc($sum_item_query);
+                    $row_sales = mysqli_fetch_assoc($sum_sales_query);
+                    $product_sold_week_5 = $row['total'];
+                    $count_sales_week_5 = $row_sales['total_sales'];
+
+                }
+
+            }
+        }
+        while($row = mysqli_fetch_assoc($total_cancel_query)){
+            $date = $row['date'];
+
+            //echo $count_sales . " " . $date . "<br>";
+            $total_sales += $count_sales;
+            $timestamp = $row['date'];
+            $timestamp= date("Y/m/d", strtotime($timestamp));
+            $timestamp_month = date("M");
+            $week = "Week " . weekOfMonth($timestamp);
+
+            if($row['item_status'] == "Cancelled"){
+
+                if($week == "Week 1"){
+                    $timestamp = $row['date'];
+                    $sum_cancelled_query = mysqli_query($conn, "SELECT COUNT(DISTINCT order_number) as total  FROM `transaction` WHERE item_status = 'Cancelled' AND date = '$timestamp'");
+                    $row = mysqli_fetch_assoc($sum_cancelled_query);
+                    $cancelled = $row['total'];
+                }elseif($week == "Week 2"){
+                    $timestamp = $row['date'];
+                    $sum_cancelled_query = mysqli_query($conn, "SELECT COUNT(DISTINCT order_number) as total  FROM `transaction` WHERE item_status = 'Cancelled' AND date = '$timestamp'");
+                    $row = mysqli_fetch_assoc($sum_cancelled_query);
+                    $cancelled_2 = $row['total'];
+                }elseif($week == "Week 3"){
+                    $timestamp = $row['date'];
+                    $sum_cancelled_query = mysqli_query($conn, "SELECT COUNT(DISTINCT order_number) as total  FROM `transaction` WHERE item_status = 'Cancelled' AND date = '$timestamp'");
+                    $row = mysqli_fetch_assoc($sum_cancelled_query);
+                    $cancelled_3 = $row['total'];
+                }elseif($week == "Week 4"){
+                    $timestamp = $row['date'];
+                    $sum_cancelled_query = mysqli_query($conn, "SELECT COUNT(item_status) as total  FROM `transaction` WHERE item_status = 'Cancelled' AND date = '$timestamp'");
+                    $row = mysqli_fetch_assoc($sum_cancelled_query);
+                    $cancelled_4 = $row['total'];
+                }elseif($week == "Week 5"){
+                    $timestamp = $row['date'];
+                    $sum_cancelled_query = mysqli_query($conn, "SELECT COUNT(item_status) as total  FROM `transaction` WHERE item_status = 'Cancelled' AND date = '$timestamp'");
+                    $row = mysqli_fetch_assoc($sum_cancelled_query);
+                    $cancelled_5 = $row['total'];
+                }
+
+            }
+        }
+
+
+
+    if(isset($week_1)){
+        $checker = mysqli_query($conn, "SELECT * FROM `weekly_sales` WHERE week = '$week_1'");
+        if(mysqli_num_rows($checker) > 0){
+            $update_query = mysqli_query($conn, "UPDATE `weekly_sales` SET product_sold = '$product_sold', product_profit = '$count_sales', transaction_cancelled = '$cancelled' WHERE week = '$week_1' ") or die("query failed");
+        }else{
+            $weekly_query = mysqli_query($conn, "INSERT INTO `weekly_sales` (week, product_sold, product_profit, transaction_cancelled) VALUES ('$week_1', '$product_sold', '$count_sales', '$cancelled')");
+        }
+    }
+
+    if(isset($week_2)){
+        $checker = mysqli_query($conn, "SELECT * FROM `weekly_sales` WHERE week = '$week_2'");
+        if(mysqli_num_rows($checker) > 0){
+            $update_query = mysqli_query($conn, "UPDATE `weekly_sales` SET product_sold = '$product_sold_week_2', product_profit = '$count_sales_week_2', transaction_cancelled = '$cancelled_2' WHERE week = '$week_2' ") or die("query failed");
+        }else{
+            $weekly_query = mysqli_query($conn, "INSERT INTO `weekly_sales` (week, product_sold, product_profit, transaction_cancelled) VALUES ('$week_2', '$product_sold_week_2', '$count_sales_week_2', '$cancelled_2')");
+        }
+    }
+
+    if(isset($week_3)){
+        $checker = mysqli_query($conn, "SELECT * FROM `weekly_sales` WHERE week = '$week_3'");
+        if(mysqli_num_rows($checker) > 0){
+            $update_query = mysqli_query($conn, "UPDATE `weekly_sales` SET product_sold = '$product_sold_week_3', product_profit = '$count_sales_week_3', transaction_cancelled = '$cancelled_3' WHERE week = '$week_3' ") or die("query failed");
+        }else{
+            $weekly_query = mysqli_query($conn, "INSERT INTO `weekly_sales` (week, product_sold, product_profit, transaction_cancelled) VALUES ('$week_3', '$product_sold_week_3', '$count_sales_week_3', '$cancelled_3')");
+        }
+    }
+
+    if(isset($week_4)){
+        $checker = mysqli_query($conn, "SELECT * FROM `weekly_sales` WHERE week = '$week_4'");
+        if(mysqli_num_rows($checker) > 0){
+            $update_query = mysqli_query($conn, "UPDATE `weekly_sales` SET product_sold = '$product_sold_week_4', product_profit = '$count_sales_week_4', transaction_cancelled = '$cancelled_4' WHERE week = '$week_4' ") or die("query failed");
+        }else{
+            $weekly_query = mysqli_query($conn, "INSERT INTO `weekly_sales` (week, product_sold, product_profit, transaction_cancelled) VALUES ('$week_4', '$product_sold_week_4', '$count_sales_week_4', '$cancelled_4')");
+        }
+    }
+
+    if(isset($week_5)){
+        $checker = mysqli_query($conn, "SELECT * FROM `weekly_sales` WHERE week = '$week_5'");
+        if(mysqli_num_rows($checker) > 0){
+            $update_query = mysqli_query($conn, "UPDATE `weekly_sales` SET product_sold = '$product_sold_week_5', product_profit = '$count_sales_week_5', transaction_cancelled = '$cancelled_5' WHERE week = '$week_5' ") or die("query failed");
+        }else{
+            $weekly_query = mysqli_query($conn, "INSERT INTO `weekly_sales` (week, product_sold, product_profit, transaction_cancelled) VALUES ('$week_5', '$product_sold_week_5', '$count_sales_week_5', '$cancelled_5')");
+        }
+    }
+
+
+
+    //$weekly_query = mysqli_query($conn, "INSERT INTO `weekly_sales` ()")
+
+    //echo $total_sales;
+
+}
+
+if (isset($_POST['logout'])) {
+    header("Location: logout.php");
+}
+
+?>
+<meta http-equiv="refresh" content="300">
+
+<!-- Content Wrapper -->
+<div id="content-wrapper" class="d-flex flex-column">
+
+    <!-- Main Content -->
+    <div id="content">
+
+        <!-- Topbar -->
+        <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
+
+            <!-- Sidebar Toggle (Topbar) -->
+            <button id="sidebarToggleTop" class="btn btn-link d-md-none rounded-circle mr-3">
+                <i class="fa fa-bars"></i>
+            </button>
+
+            <!-- Topbar Navbar -->
+            <ul class="navbar-nav ml-auto">
+
+                <!-- Nav Item - Search Dropdown (Visible Only XS) -->
+                <li class="nav-item dropdown no-arrow d-sm-none">
+                    <a class="nav-link dropdown-toggle" href="#" id="searchDropdown" role="button"
+                       data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <i class="fas fa-search fa-fw"></i>
+                    </a>
+                    <!-- Dropdown - Messages -->
+                    <div class="dropdown-menu dropdown-menu-right p-3 shadow animated--grow-in"
+                         aria-labelledby="searchDropdown">
+                        <form class="form-inline mr-auto w-100 navbar-search">
+                            <div class="input-group">
+                                <input type="text" class="form-control bg-light border-0 small"
+                                       placeholder="Search for..." aria-label="Search"
+                                       aria-describedby="basic-addon2">
+                                <div class="input-group-append">
+                                    <button class="btn btn-primary" type="button">
+                                        <i class="fas fa-search fa-sm"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </li>
+
+                <!-- Nav Item - Alerts -->
+                <li class="nav-item dropdown no-arrow mx-1">
+                    <a class="nav-link dropdown-toggle" href="#" id="alertsDropdown" role="button"
+                       data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <i class="fas fa-bell fa-fw"></i>
+                        <?php $notification_query = mysqli_query($conn, "SELECT * FROM notifications WHERE status = '0' ORDER BY id DESC"); ?>
+                        <!-- Counter - Alerts -->
+                        <span class="badge badge-danger badge-counter"><?php echo mysqli_num_rows($notification_query);?></span>
+                    </a>
+                    <!-- Dropdown - Alerts -->
+                    <div class="dropdown-list dropdown-menu dropdown-menu-right shadow animated--grow-in"
+                         aria-labelledby="alertsDropdown">
+                        <h6 class="dropdown-header">
+                            Alerts Center
+                        </h6>
+                        <?php
+
+                            if(mysqli_num_rows($notification_query) > 0){
+                                foreach ($notification_query as $item){
+                        ?>
+                        <a class="dropdown-item d-flex align-items-center" href="<?php echo $item["url"] ?>">
+                            <div class="mr-3">
+                                <div class="icon-circle bg-primary">
+                                    <i class="fas fa-file-alt text-white"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="small text-gray-500"><?php echo $item["date"]; ?></div>
+                                <span class="font-weight-bold"><?php echo $item["text"]; ?></span>
+                            </div>
+                        </a>
+                        <!---
+                        <a class="dropdown-item d-flex align-items-center" href="#">
+                            <div class="mr-3">
+                                <div class="icon-circle bg-success">
+                                    <i class="fas fa-donate text-white"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="small text-gray-500">December 7, 2019</div>
+                                $290.29 has been deposited into your account!
+                            </div>
+                        </a>
+                        <a class="dropdown-item d-flex align-items-center" href="#">
+                            <div class="mr-3">
+                                <div class="icon-circle bg-warning">
+                                    <i class="fas fa-exclamation-triangle text-white"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="small text-gray-500">December 2, 2019</div>
+                                Spending Alert: We've noticed unusually high spending for your account.
+                            </div>
+                        </a> --->
+                        <?php } }
+                            if(mysqli_num_rows($notification_query) == 0){
+                                echo '<div class="dropdown-item text-center small text-gray-500">No Notification</div>';
+                            }
+                        ?>
+
+
+                    </div>
+                </li>
+
+
+                <!-- Nav Item - User Information -->
+                <li class="nav-item dropdown no-arrow">
+                    <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
+                       data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <span class="mr-2 d-none d-lg-inline text-gray-600 small"><?php echo $first_name; ?> <?php echo $last_name; ?></span>
+                        
+                            <?php 
+                            //$user_image = $_SESSION['username']->user_image;
+                            if($user_image == "./assets/products/" || $user_image == ""){
+                                echo '<img class="img-profile rounded-circle" src="./assets/LOGO.png" alt="User Image" width="80" height="80">';
+
+                            }else{
+                                echo '<img img class="img-profile rounded-circle" src="' . $user_image. '" style="border-radius: 50%;"  height="100" width="100" alt="">';
+                                
+                            }
+                             
+                            ?>
+                    </a>
+                    <!-- Dropdown - User Information -->
+                    <div class="dropdown-menu dropdown-menu-right shadow animated--grow-in"
+                         aria-labelledby="userDropdown">
+                        <a class="dropdown-item" href="register">
+                            <i class="fas fa-cogs fa-sm fa-fw mr-2 text-gray-400"></i>
+                            Admin and User
+                        </a>
+
+                        <div class="dropdown-divider"></div>
+                        <a class="dropdown-item" href="" data-toggle="modal" data-target="#logoutModal">
+                            <i class="fas fa-sign-out-alt fa-sm fa-fw mr-2 text-gray-400"></i>
+                            Logout
+                        </a>
+                    </div>
+                </li>
+
+            </ul>
+
+        </nav>
+        <!-- End of Topbar -->
+
+        <div class="container" style="width: 100%; height: 80%;overflow: auto;">
+            <!-- Begin Page Content -->
+                <div class="container-fluid">
+
+                    <!-- Page Heading -->
+                    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+                        <h1 class="h3 mb-0 text-gray-800">Dashboard</h1>
+
+                    </div>
+
+                    <!-- Content Row -->
+                    <div class="row">
+
+                        <!-- Earnings (Monthly) Card Example -->
+                        <div class="col-xl-3 col-md-6 mb-4">
+                            <div class="card border-left-primary shadow h-100 py-2">
+                                <div class="card-body">
+                                    <div class="row no-gutters align-items-center">
+                                        <div class="col mr-2">
+                                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                                List of Pending Orders</div>
+                                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $count ?? 0 ?></div>
+                                        </div>
+                                        <div class="col-auto">
+                                            <i class="fas fa-calendar fa-2x text-gray-300"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Earnings (Monthly) Card Example -->
+                        <div class="col-xl-3 col-md-6 mb-4">
+                            <div class="card border-left-success shadow h-100 py-2">
+                                <div class="card-body">
+                                    <div class="row no-gutters align-items-center">
+                                        <div class="col mr-2">
+                                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                                Total number of products available</div>
+                                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $count_product ?? 0 ?></div>
+                                        </div>
+                                        <div class="col-auto">
+                                            <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Earnings (Monthly) Card Example -->
+                        <div class="col-xl-3 col-md-6 mb-4">
+                            <div class="card border-left-info shadow h-100 py-2">
+                                <div class="card-body">
+                                    <div class="row no-gutters align-items-center">
+                                        <div class="col mr-2">
+                                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Scheduled Delivery
+                                            </div>
+                                            <div class="row no-gutters align-items-center">
+                                                <div class="col-auto">
+                                                    <div class="h5 mb-0 mr-3 font-weight-bold text-gray-800"><?php echo $count_delivery ?? 0 ?></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-auto">
+                                            <i class="fas fa-truck fa-2x text-gray-300"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pending Requests Card Example -->
+                        <div class="col-xl-3 col-md-6 mb-4">
+                            <div class="card border-left-warning shadow h-100 py-2">
+                                <div class="card-body">
+                                    <div class="row no-gutters align-items-center">
+                                        <div class="col mr-2">
+                                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                                Total Transaction</div>
+                                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $count_transaction ?? 0 ?></div>
+                                        </div>
+                                        <div class="col-auto">
+                                            <i class="fas fa-comments fa-2x text-gray-300"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Content Row -->
+
+                </div>
+
+                <div class="container d-flex">
+
+                    <div class="row">
+                        <div class="col bg-white overflow-auto" style="width: 450px; height: 600px; margin-right: 20px; border: 2px solid; border-radius:10px;">
+                            <div id="piechart" style="width: 450px; height: 500px; "></div>
+                        </div>
+
+                        <div class="col p-4 bg-white overflow-auto" style="border: 2px solid; border-radius:10px;">
+                            <div id="barchart_material" style="width: 600px; height: 500px; "></div>
+                        </div>
+                        
+                    </div>
+
+                </div>
+
+                <div class="container my-2 d-flex">
+                    <div class="row">
+
+                        <div class="col p-4 bg-white overflow-auto" style="border: 2px solid; border-radius:10px;">
+                            <div id="chart_div" style="width: 600px; height: 500px; "></div>
+                        </div>
+                    </div>
+                </div>
+        </div>    
+            <!-- /.container-fluid -->
+
+
+    <!-- End of Main Content -->
+
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script type="text/javascript">
+        google.charts.load('current', {'packages':['corechart']});
+        google.charts.setOnLoadCallback(drawChart);
+
+        function drawChart() {
+
+            var data = google.visualization.arrayToDataTable([
+                ['Orders', 'Total'],
+                ['Processing Orders', <?php echo $count_processing ?? 0 ?>],
+                ['Delivering Orders', <?php echo $count_delivery ?? 0 ?>],
+                ['Reservation', <?php echo $count_reserve ?? 0 ?>],
+                ['Transaction Completed', <?php echo $count_transaction ?? 0 ?>],
+
+
+            ]);
+
+            var options = {
+                title: 'Orders and Reservation Chart'
+            };
+
+            var chart = new google.visualization.PieChart(document.getElementById('piechart'));
+
+            chart.draw(data, options);
+        }
+
+
+    </script>
+
+    <script type="text/javascript">
+        google.charts.load('current', {'packages':['bar']});
+        google.charts.setOnLoadCallback(drawChart);
+
+        function drawChart() {
+            var data = google.visualization.arrayToDataTable([
+                ['Week', 'Product Sold', 'Transaction Cancelled'],
+                <?php
+                    $week_query = mysqli_query($conn, "SELECT DISTINCT week, product_sold, transaction_cancelled FROM `weekly_sales`");
+                    while($row =mysqli_fetch_assoc($week_query)){
+                        $week = $row['week'];
+                        $product_sold = $row['product_sold'];
+                        //$product_profit = $row['product_profit'];
+                        $transaction_cancelled = $row['transaction_cancelled'];
+
+                ?>
+                ['<?php echo $week;?>',<?php echo $product_sold;?>,  <?php echo $transaction_cancelled; ?>],
+                <?php
+                 }
+                ?>
+
+            ]);
+
+            var options = {
+                chart: {
+                    title: 'Weekly Transaction Report',
+                    subtitle: 'Product Sold and Cancelled Transaction: Monthly',
+                },
+                bars: 'vertical' // Required for Material Bar Charts.
+            };
+
+            var chart = new google.charts.Bar(document.getElementById('barchart_material'));
+
+            chart.draw(data, google.charts.Bar.convertOptions(options));
+        }
+    </script>
+
+<script type="text/javascript">
+        google.charts.load('current', {packages: ['corechart', 'bar']});
+        google.charts.setOnLoadCallback(drawBasic);
+
+        function drawBasic() {
+
+            var data = google.visualization.arrayToDataTable([
+                ['Week', 'Product Profit'],
+                <?php
+                    $week_query = mysqli_query($conn, "SELECT DISTINCT week, product_profit, transaction_cancelled FROM `weekly_sales`");
+                    while($row =mysqli_fetch_assoc($week_query)){
+                        $week = $row['week'];
+                        //$product_sold = $row['product_sold'];
+                        $product_profit = $row['product_profit'];
+                        //$transaction_cancelled = $row['transaction_cancelled'];
+
+                ?>
+                ['<?php echo $week;?>',<?php echo $product_profit;?>],
+                <?php
+                 }
+                ?>
+            ]);
+
+            var options = {
+                title: 'Weekly Sales Report',
+                chartArea: {width: '50%'},
+                hAxis: {
+                title: 'Total Sales',
+                minValue: 0
+                },
+                vAxis: {
+                title: 'Week'
+                }, 
+                bars: 'vertical'
+            };
+
+            var chart = new google.visualization.BarChart(document.getElementById('chart_div'));
+
+            chart.draw(data, options);
+            }
+    </script>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+
+        $(document).ready(function(){
+            $("#alertsDropdown").on("click", function (){
+                $.ajax({
+                    url: "readNotification.php",
+                    success: function (res){
+                        console.log(res);
+                    }
+                });
+            });
+        });
+    </script>
+    
+</div>
+    
+
+
+
+
+
+
+
+
+
+
+

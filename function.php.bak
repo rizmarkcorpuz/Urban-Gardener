@@ -1,0 +1,180 @@
+<?php
+
+session_start();
+
+function login($data){
+
+    $errors = array();
+
+    //echo "<pre>";
+    //print_r($data);
+
+    //validate
+    if(!preg_match('/^[a-zA-Z0-9]+$/', $data['username'])){
+        $errors[] = "Please enter a valid username";
+    }
+
+    if(strlen(trim($data['password'])) < 4){
+        $errors[] = "Password must be at least 4 character long";
+        $_POST['password'] = "";
+    }
+
+
+    //check
+    if(count($errors) == 0){
+
+        $arr['username'] = $data['username'];
+        $password = hash('sha256', $data['password']);
+
+        $query = "select * from user where username = :username limit 1";
+
+        $row = database_run($query, $arr);
+
+        if(is_array($row)){
+            $row = $row[0];
+
+            if($password === $row->password){
+                $_SESSION['username'] = $row;
+                $_SESSION['LOGGED_IN'] = true;
+            }else{
+                $errors[] = "Wrong Email or Password";
+                $_POST['password'] = "";
+            }
+        }else{
+            $errors[] = "Wrong Email or Password";
+            $_POST['password'] = "";
+        }
+    }
+    return $errors;
+}
+function signup($data){
+
+    $errors = array();
+
+    //echo "<pre>";
+    //print_r($data);
+
+    //validate
+
+    if(!preg_match('/^[a-zA-Z ]+$/', $data['first_name'])){
+        $errors[] = "Please enter a valid first name";
+    }
+
+    if(!preg_match('/^[a-zA-Z ]+$/', $data['last_name'])){
+        $errors[] = "Please enter a valid last name";
+    }
+
+
+    if(!preg_match('/^[a-zA-Z0-9]+$/', $data['username'])){
+        $errors[] = "Please enter a valid username";
+    }
+
+    if(!filter_var($data['email'], FILTER_VALIDATE_EMAIL)){
+        $errors[] = "Please enter a valid username";
+    }
+
+    if(strlen(trim($data['password'])) < 4){
+        $errors[] = "Password must be at least 4 character long";
+    }
+
+    if($data['password'] != ($data['cpassword'])){
+        $errors[] = "Password must match";
+    }
+
+    
+
+    $check_email = database_run("select * from user where email = :email limit 1", ['email'=> $data['email']]);
+    $check_username = database_run("select * from user where  username = :username limit 1", ['username'=> $data['username']]);
+
+    if(is_array($check_email)){
+        $errors[] = "Email already exists";
+    }
+
+    if(is_array($check_username)){
+        $errors[] = "Username already exists";
+    }
+
+
+    //save
+    if(count($errors) == 0){
+
+        $arr['first_name'] = $data['first_name'];
+        $arr['last_name'] = $data['last_name'];
+        $arr['contact_number'] = $data['contact_number'];
+        $arr['billing_address'] = $data['billing_address'];
+        $arr['zipcode'] = $data['zipcode'];
+        $arr['user_image'] = './assets/products/' . $_FILES['user_image']['name'];
+        $arr['username'] = $data['username'];
+        $arr['email'] = $data['email'];
+        $arr['password'] = hash('sha256', $data['password']);
+        $arr['user_type'] = 1;
+        $arr['date'] = date("Y-m-d H:i:s");
+
+        $user_image_tmp_name = $_FILES['user_image']['tmp_name'];
+        $user_image_folder = './assets/products/' . $_FILES['user_image']['name'];
+
+        $query = "insert into user (first_name,last_name,contact_number,billing_address,zipcode,user_image,username,email,password,user_type,date) values 
+        (:first_name,:last_name,:contact_number,:billing_address,:zipcode,:user_image,:username,:email,:password,:user_type,:date)";
+
+        move_uploaded_file($user_image_tmp_name, $user_image_folder);
+        database_run($query, $arr);
+    }
+    return $errors;
+}
+
+function database_run($query,$vars = array()){
+
+    $string = "mysql:host=localhost;dbname=shopee";
+    $con = new PDO($string,'root', '');
+
+    if(!$con){
+        return false;
+    }
+
+    $stm = $con->prepare($query);
+    $check = $stm->execute($vars);
+
+    if($check){
+        $data = $stm->fetchAll(PDO::FETCH_OBJ);
+        if(count($data) > 0){
+            return $data;
+        }
+    }
+
+    return false;
+}
+
+function check_login($redirect = true){
+
+    if(isset($_SESSION['username']) && isset($_SESSION['LOGGED_IN'])){
+
+        return true;
+    }
+
+    if($redirect){
+        header("Location: login.php");
+        die;
+    }else{
+        return false;
+    }
+
+}
+
+function check_verified(){
+
+    $user_id = $_SESSION['username']->user_id;
+    $query = "select * from user where user_id = '$user_id' limit 1";
+    $row = database_run($query);
+
+    if(is_array($row)){
+        $row = $row[0];
+        if($row->email == $row->email_verified){
+
+            return true;
+        }
+    }
+
+
+    return false;
+
+}
